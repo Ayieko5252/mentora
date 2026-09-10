@@ -1,0 +1,38 @@
+# Netlify deploy config for Mentora.
+# Frontend (React/Vite build) is served statically from client/dist.
+# The Express API runs as a serverless function (netlify/functions/api.js).
+# Requires a cloud Postgres reachable from Netlify — set DATABASE_URL in the
+# Netlify site environment (e.g. a Neon pooled connection string).
+
+[build]
+  command = "bash netlify-build.sh"
+  publish = "client/dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Skip embedded-postgres' native binary download during the build (it is a
+  # local-dev-only dependency and not used in production).
+  PRISMA_SKIP_POSTINSTALL_GENERATE = "1"
+
+[functions]
+  # Bundle the Prisma schema, query engine and the data assets the PDF
+  # generators read (food photos, PVsyst source text).
+  included_files = [
+    "server/prisma/schema.prisma",
+    "server/prisma/data/**",
+    "server/node_modules/.prisma/**",
+    "server/node_modules/@prisma/client/**"
+  ]
+
+# API → serverless function
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# SPA fallback (static files, incl. /media/food/*, are served before this)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

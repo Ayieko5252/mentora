@@ -1,0 +1,16 @@
+{
+  "name": "mentora",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mentora — discipline-agnostic e-learning & guidance platform (monorepo root)",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "prisma:generate": "npm --prefix server run prisma:generate",
+    "migrate": "npm --prefix server run prisma:migrate",
+    "seed": "npm --prefix server run seed",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev"
+  }
+}

@@ -1,0 +1,26 @@
+version: "3.9"
+
+# Convenience Postgres for local development.
+# Run:  docker compose up -d
+# The DATABASE_URL in server/.env.example already points at this instance.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mentora-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mentora
+      POSTGRES_PASSWORD: mentora
+      POSTGRES_DB: mentora
+    ports:
+      - "5432:5432"
+    volumes:
+      - mentora_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mentora"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mentora_pgdata:

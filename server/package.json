@@ -1,0 +1,51 @@
+{
+  "name": "mentora-server",
+  "version": "1.0.0",
+  "description": "Mentora backend API — discipline-agnostic e-learning & guidance platform",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "db:push": "prisma db push",
+    "seed": "node prisma/seed.js",
+    "seed:reset": "prisma migrate reset --force && node prisma/seed.js",
+    "seed:courses": "node prisma/seed-courses.js",
+    "add:courses": "node prisma/add-courses.js",
+    "update:labs": "node prisma/update-labs.js",
+    "update:content": "node prisma/update-content.js",
+    "generate:content": "node prisma/generate-content.js",
+    "pg:embedded": "node scripts/pg-embedded.js",
+    "reseed:recipes": "node prisma/reseed-recipes.js",
+    "test": "node scripts/smoke.mjs"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "pdfkit": "^0.19.1",
+    "serverless-http": "^4.0.0",
+    "stripe": "^17.4.0",
+    "zod": "^3.23.8"
+  },
+  "optionalDependencies": {
+    "embedded-postgres": "^18.4.0-beta.17"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

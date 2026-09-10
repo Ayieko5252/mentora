@@ -1,0 +1,327 @@
+// Mentora — Prisma schema
+// Discipline-agnostic e-learning & guidance platform.
+//
+// Two seeded verticals at launch (Engineering Software courses, Recipes),
+// but nothing here is hardcoded to those two: `Discipline` is a first-class
+// entity and any number of disciplines/courses/recipes can be added.
+
+generator client {
+  provider = "prisma-client-js"
+  // "native" for local dev; the rhel targets are the Prisma query-engine
+  // binaries needed to run inside Netlify Functions (AWS Lambda / Amazon Linux).
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "rhel-openssl-1.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+enum Role {
+  LEARNER
+  INSTRUCTOR
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(LEARNER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  purchases    Purchase[]
+  enrollments  Enrollment[]
+  attempts     AssessmentAttempt[]
+}
+
+// ---------------------------------------------------------------------------
+// Catalog taxonomy — first-class, extensible
+// ---------------------------------------------------------------------------
+
+model Discipline {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  // What kind of content this discipline holds. Lets the UI/route layer stay
+  // generic while still rendering the right experience.
+  kind        DisciplineKind @default(COURSE)
+  createdAt   DateTime @default(now())
+
+  courses     Course[]
+  recipes     Recipe[]
+}
+
+enum DisciplineKind {
+  COURSE
+  RECIPE
+}
+
+// ---------------------------------------------------------------------------
+// Content model 1 — Courses
+//   Course -> 10 Topics -> (15+ Notes, 3 Labs, 1 SelfAssessment(10 Questions))
+// ---------------------------------------------------------------------------
+
+model Course {
+  id           String   @id @default(cuid())
+  disciplineId String
+  discipline   Discipline @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+
+  slug         String   @unique
+  title        String
+  summary      String
+  level        String   @default("Beginner") // Beginner | Intermediate | Advanced
+  category     String?                        // discipline area, e.g. "CFD", "CAE / FEA"
+  priceCents   Int      @default(2000)       // $20.00
+  published    Boolean  @default(true)
+  isPlaceholder Boolean @default(false)      // clearly marks generated seed content
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  topics       Topic[]
+  enrollments  Enrollment[]
+  purchases    Purchase[]
+
+  @@index([disciplineId])
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order     Int      // 1..10
+  title     String
+
+  notes     Note[]
+  labs      Lab[]
+  assessment SelfAssessment?
+  progress  TopicProgress[]
+
+  @@unique([courseId, order])
+  @@index([courseId])
+}
+
+model Note {
+  id         String   @id @default(cuid())
+  topicId    String
+  topic      Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  pageNumber Int      // 1..15+
+  title      String
+  contentMarkdown String
+
+  @@unique([topicId, pageNumber])
+  @@index([topicId])
+}
+
+model Lab {
+  id               String   @id @default(cuid())
+  topicId          String
+  topic            Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  order            Int      // 1..3
+  title            String
+  objective        String
+  instructionsMarkdown String
+  estimatedMinutes Int      @default(45)
+
+  @@unique([topicId, order])
+  @@index([topicId])
+}
+
+model SelfAssessment {
+  id       String   @id @default(cuid())
+  topicId  String   @unique
+  topic    Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title    String
+
+  questions Question[]
+  attempts  AssessmentAttempt[]
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  assessmentId  String
+  assessment    SelfAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  order         Int      // 1..10
+  prompt        String
+  explanation   String?  // optional rationale, shown after grading only
+
+  choices       Choice[]
+
+  @@unique([assessmentId, order])
+  @@index([assessmentId])
+}
+
+model Choice {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int      // 1..4
+  text       String
+  // NEVER serialized to the client before grading (see selfAssessment.service.js)
+  isCorrect  Boolean  @default(false)
+
+  @@unique([questionId, order])
+  @@index([questionId])
+}
+
+// ---------------------------------------------------------------------------
+// Content model 2 — Recipes & Booklets
+// ---------------------------------------------------------------------------
+
+model Recipe {
+  id           String   @id @default(cuid())
+  disciplineId String
+  discipline   Discipline @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+
+  slug         String   @unique
+  title        String
+  cuisine      String   @default("International")
+  author       String   @default("The Mentora Kitchen")
+  servings     String   @default("Serves 4")
+  totalTime    String   @default("~40 min")
+  imageUrl     String?  // food photo, served from /media/food/...
+  history      String   // brief narrative on origin/background
+  ingredients  String[] // structured ingredient list (booklet "ingredients" page)
+  steps        Json?    // [{ title, description }] — booklet step pages
+  instructionsMarkdown String // step-by-step preparation (legacy / on-screen)
+  priceCents   Int      @default(500) // $5.00
+  published    Boolean  @default(true)
+  isPlaceholder Boolean @default(false)
+  createdAt    DateTime @default(now())
+
+  purchases    Purchase[]
+  booklets     BookletRecipe[]
+
+  @@index([disciplineId])
+}
+
+model Booklet {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String
+  priceCents  Int      @default(5000) // $50.00 for 100 recipes (discounted vs 100 x $5 = $500)
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  recipes     BookletRecipe[]
+  purchases   Purchase[]
+}
+
+model BookletRecipe {
+  bookletId String
+  booklet   Booklet @relation(fields: [bookletId], references: [id], onDelete: Cascade)
+  recipeId  String
+  recipe    Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  order     Int
+
+  @@id([bookletId, recipeId])
+  @@index([recipeId])
+}
+
+// ---------------------------------------------------------------------------
+// Commerce & access control
+// ---------------------------------------------------------------------------
+
+enum PurchaseItemType {
+  COURSE
+  RECIPE
+  BOOKLET
+}
+
+enum PurchaseStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model Purchase {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  itemType       PurchaseItemType
+  courseId       String?
+  course         Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  recipeId       String?
+  recipe         Recipe?  @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  bookletId      String?
+  booklet        Booklet? @relation(fields: [bookletId], references: [id], onDelete: SetNull)
+
+  amountCents    Int
+  currency       String   @default("usd")
+  status         PurchaseStatus @default(PENDING)
+  stripeSessionId String? @unique
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, itemType])
+}
+
+// ---------------------------------------------------------------------------
+// Learning progress & grading
+// ---------------------------------------------------------------------------
+
+model Enrollment {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId       String
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Cached grading snapshot (recomputed by the grading engine on each change).
+  notesCompletionPercent Float @default(0)
+  selfAssessmentAverage  Float @default(0)
+  overallAverage         Float @default(0)
+  passed                 Boolean @default(false)
+  completedAt            DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  topicProgress  TopicProgress[]
+  attempts       AssessmentAttempt[]
+
+  @@unique([userId, courseId])
+  @@index([userId])
+}
+
+model TopicProgress {
+  id           String   @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  topicId      String
+  topic        Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  notesRead    Boolean  @default(false) // learner marked the notes read
+  updatedAt    DateTime @updatedAt
+
+  @@unique([enrollmentId, topicId])
+  @@index([enrollmentId])
+}
+
+model AssessmentAttempt {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessmentId   String
+  assessment     SelfAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  enrollmentId   String
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  scorePercent   Float
+  passed         Boolean  // scorePercent >= 50
+  answers        Json     // { questionId: choiceId } snapshot of submitted answers
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([assessmentId])
+  @@index([enrollmentId])
+}
