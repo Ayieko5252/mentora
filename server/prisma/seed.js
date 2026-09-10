@@ -5,11 +5,15 @@
 //       1 ten-question assessment per topic  ->  30 labs / course)
 //   1,000 Recipes (title, brief history, instructions)
 //   10 Recipe booklets of 100 recipes each ($50, discounted vs 100 x $5)
-//   demo admin + learner accounts (+ a couple of sample purchases)
+//   demo admin + learner accounts (+ a couple of sample purchases),
+//       unless SEED_DEMO_USERS=false
 //
 // For a fast local demo you can shrink the volume without changing structure:
 //   COURSE_LIMIT=6 RECIPE_LIMIT=200 npm run seed
 // Defaults are the full 200 / 1000.
+//
+// For a public deployment, skip the demo logins and create your own admin:
+//   SEED_DEMO_USERS=false ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=... npm run seed
 // ---------------------------------------------------------------------------
 
 import "dotenv/config";
@@ -28,6 +32,9 @@ import { imageUrlFor } from "./food-images.js";
 const COURSE_LIMIT = Number(process.env.COURSE_LIMIT || 200);
 const PROGRAMMING_LIMIT = Number(process.env.PROGRAMMING_LIMIT || 30);
 const RECIPE_LIMIT = Number(process.env.RECIPE_LIMIT || 1000);
+// Demo logins are for local development. Seeds for a public deployment should
+// set SEED_DEMO_USERS=false and provide ADMIN_EMAIL / ADMIN_PASSWORD instead.
+const SEED_DEMO_USERS = (process.env.SEED_DEMO_USERS ?? "true").toLowerCase() !== "false";
 
 async function reset() {
   console.log("Clearing existing data...");
@@ -45,19 +52,45 @@ async function reset() {
 }
 
 async function seedUsers() {
-  console.log("Creating demo users...");
-  const [adminHash, learnerHash] = await Promise.all([
-    bcrypt.hash("Admin123!", 10),
-    bcrypt.hash("Learner123!", 10),
-  ]);
+  const users = {};
 
-  const admin = await prisma.user.create({
-    data: { email: "admin@mentora.dev", name: "Mentora Admin", role: "ADMIN", passwordHash: adminHash },
-  });
-  const learner = await prisma.user.create({
-    data: { email: "learner@mentora.dev", name: "Demo Learner", role: "LEARNER", passwordHash: learnerHash },
-  });
-  return { admin, learner };
+  if (SEED_DEMO_USERS) {
+    console.log("Creating demo users...");
+    const [adminHash, learnerHash] = await Promise.all([
+      bcrypt.hash("Admin123!", 10),
+      bcrypt.hash("Learner123!", 10),
+    ]);
+
+    users.admin = await prisma.user.create({
+      data: { email: "admin@mentora.dev", name: "Mentora Admin", role: "ADMIN", passwordHash: adminHash },
+    });
+    users.learner = await prisma.user.create({
+      data: { email: "learner@mentora.dev", name: "Demo Learner", role: "LEARNER", passwordHash: learnerHash },
+    });
+  } else {
+    console.log("Skipping demo users (SEED_DEMO_USERS=false).");
+  }
+
+  // A real admin account whose credentials come from the environment, never
+  // from source — use this for any publicly reachable deployment.
+  const { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME } = process.env;
+  if (ADMIN_EMAIL || ADMIN_PASSWORD) {
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+      throw new Error("Set both ADMIN_EMAIL and ADMIN_PASSWORD, or neither.");
+    }
+    if (ADMIN_PASSWORD.length < 12) {
+      throw new Error("ADMIN_PASSWORD must be at least 12 characters.");
+    }
+    console.log(`Creating admin account ${ADMIN_EMAIL}...`);
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+    users.owner = await prisma.user.upsert({
+      where: { email: ADMIN_EMAIL },
+      update: { role: "ADMIN", passwordHash },
+      create: { email: ADMIN_EMAIL, name: ADMIN_NAME || "Mentora Admin", role: "ADMIN", passwordHash },
+    });
+  }
+
+  return users;
 }
 
 async function seedDisciplines() {
@@ -299,7 +332,7 @@ async function main() {
   // Recipes department.
   await seedRecipes(cooking.id);
   await seedBooklets();
-  await seedSampleAccess(learner);
+  if (learner) await seedSampleAccess(learner);
 
   const [courses, topics, recipes, booklets] = await Promise.all([
     prisma.course.count(),
@@ -311,9 +344,11 @@ async function main() {
   console.log("\n✔ Seed complete");
   console.log(`  Courses: ${courses}  Topics: ${topics}  Recipes: ${recipes}  Booklets: ${booklets}`);
   console.log(`  Took ${((Date.now() - start) / 1000).toFixed(1)}s`);
-  console.log("\n  Demo logins:");
-  console.log("    admin@mentora.dev / Admin123!");
-  console.log("    learner@mentora.dev / Learner123!\n");
+  if (SEED_DEMO_USERS) {
+    console.log("\n  Demo logins:");
+    console.log("    admin@mentora.dev / Admin123!");
+    console.log("    learner@mentora.dev / Learner123!\n");
+  }
 }
 
 main()

@@ -5,7 +5,7 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
+import { serverPath } from "./lib/paths.js";
 
 import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
@@ -46,7 +46,7 @@ export function createApp() {
   app.get("/api/health", (_req, res) => res.json({ status: "ok", mode: env.paymentsMockMode ? "mock-payments" : "stripe" }));
 
   // Public food photos used by recipe cards & booklets.
-  const mediaDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../prisma/data/food");
+  const mediaDir = serverPath("prisma", "data", "food");
   app.use("/media/food", express.static(mediaDir, { maxAge: "7d" }));
 
   app.use("/api/auth", authRoutes);
@@ -59,8 +59,7 @@ export function createApp() {
   // ----- Serve the built frontend from the same origin (production/tunnel) ---
   // When client/dist exists we serve the SPA here so one port hosts both the
   // app and the API. Unknown /api routes still 404 as JSON.
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const clientDist = path.resolve(__dirname, "../../client/dist");
+  const clientDist = serverPath("..", "client", "dist");
   if (fs.existsSync(path.join(clientDist, "index.html"))) {
     app.use(express.static(clientDist));
     app.get("*", (req, res, next) => {

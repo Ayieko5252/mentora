@@ -35,3 +35,7 @@ server/.pgdata/
 .vscode/
 .idea/
 coverage/
+
+# Local Netlify folder
+.netlify
+

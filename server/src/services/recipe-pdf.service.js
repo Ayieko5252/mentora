@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
+import { serverPath } from "../lib/paths.js";
 
 // ---------------------------------------------------------------------------
 // Recipe booklet PDF — mirrors the supplied Canva template:
@@ -13,8 +13,7 @@ import { fileURLToPath } from "url";
 // in memory). Same generator renders a single recipe or a whole booklet.
 // ---------------------------------------------------------------------------
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FOOD_DIR = path.resolve(__dirname, "../../prisma/data/food");
+const FOOD_DIR = serverPath("prisma", "data", "food");
 
 // Palette sampled from the template
 const BROWN = "#3b2a22";

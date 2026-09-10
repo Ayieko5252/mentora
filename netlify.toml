@@ -1,13 +1,13 @@
 # Netlify deploy config for Mentora.
 # Frontend (React/Vite build) is served statically from client/dist.
-# The Express API runs as a serverless function (netlify/functions/api.js).
+# The Express API runs as a serverless function (server/functions/api.mjs).
 # Requires a cloud Postgres reachable from Netlify — set DATABASE_URL in the
 # Netlify site environment (e.g. a Neon pooled connection string).
 
 [build]
   command = "bash netlify-build.sh"
   publish = "client/dist"
-  functions = "netlify/functions"
+  functions = "server/functions"
 
 [build.environment]
   NODE_VERSION = "20"
@@ -16,13 +16,17 @@
   PRISMA_SKIP_POSTINSTALL_GENERATE = "1"
 
 [functions]
-  # Bundle the Prisma schema, query engine and the data assets the PDF
-  # generators read (food photos, PVsyst source text).
+  node_bundler = "esbuild"
+  # pdfkit reads its .afm font metrics from files beside its own code, so keep it
+  # unbundled; it resolves from server/node_modules because the function lives
+  # under server/. (@prisma/client is auto-externalized by Netlify and resolves
+  # the same way.) Ship the assets esbuild can't see: the Prisma schema + query
+  # engine and the food photos / PVsyst source the PDF generators read.
+  external_node_modules = ["pdfkit"]
   included_files = [
     "server/prisma/schema.prisma",
     "server/prisma/data/**",
-    "server/node_modules/.prisma/**",
-    "server/node_modules/@prisma/client/**"
+    "server/node_modules/.prisma/**"
   ]
 
 # API → serverless function

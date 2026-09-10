@@ -44,11 +44,13 @@ async function main() {
   // 3. Load owned course content
   console.log("\nLearning flow");
   const content = await api(`/learn/courses/${ownedSlug}/content`, { token });
-  ok(content.status === 200 && content.data.topics.length === 10, "owned course returns 10 topics");
   const topics = content.data.topics;
+  // Only assessed topics are graded; the non-assessed "Opportunities" topic (order 11) has no assessment.
+  const assessed = topics.filter((t) => t.assessment);
+  ok(content.status === 200 && assessed.length === 10, `owned course returns 10 assessed topics (${topics.length} total)`);
 
   // assessment payloads must never leak the correct flag
-  const firstAssess = await api(`/learn/assessments/${topics[0].assessment.id}`, { token });
+  const firstAssess = await api(`/learn/assessments/${assessed[0].assessment.id}`, { token });
   const leaks = JSON.stringify(firstAssess.data).toLowerCase().includes("iscorrect");
   ok(!leaks, "assessment payload does not expose correct answers");
 
@@ -61,7 +63,7 @@ async function main() {
 
   // 5. Answer every assessment CORRECTLY (read correct choices from DB)
   let lastEnrollment = null;
-  for (const t of topics) {
+  for (const t of assessed) {
     const questions = await prisma.question.findMany({
       where: { assessmentId: t.assessment.id },
       select: { id: true, choices: { where: { isCorrect: true }, select: { id: true } } },
@@ -79,11 +81,11 @@ async function main() {
 
   // 6. A wrong submission should score 0 and not by itself pass
   const q0 = await prisma.question.findMany({
-    where: { assessmentId: topics[0].assessment.id },
+    where: { assessmentId: assessed[0].assessment.id },
     select: { id: true, choices: { where: { isCorrect: false }, select: { id: true }, take: 1 } },
   });
   const wrong = {}; for (const q of q0) wrong[q.id] = q.choices[0].id;
-  const wsub = await api(`/learn/assessments/${topics[0].assessment.id}/submit`, { method: "POST", token, body: { answers: wrong } });
+  const wsub = await api(`/learn/assessments/${assessed[0].assessment.id}/submit`, { method: "POST", token, body: { answers: wrong } });
   ok(wsub.data.scorePercent === 0, "an all-wrong submission scores 0%");
 
   // 7. Gated downloads
