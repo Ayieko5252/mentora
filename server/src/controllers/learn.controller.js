@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { userOwnsCourse, userOwnsRecipe, userOwnsBooklet } from "../services/access.service.js";
 import { pipeRecipeBooklet, pipeBooklet } from "../services/recipe-pdf.service.js";
+import { env } from "../config/env.js";
 import {
   gradeAssessment,
   recomputeEnrollment,
@@ -334,6 +335,18 @@ export const downloadBookletPdf = asyncHandler(async (req, res) => {
   if (!owns) throw ApiError.forbidden("Purchase this booklet to download it");
 
   const recipes = booklet.recipes.map((br) => br.recipe).filter(Boolean);
+
+  // A full booklet PDF (~11 MB for 100 recipes) exceeds the serverless response
+  // cap. Decline gracefully there and point the buyer at per-recipe downloads,
+  // which they also own and which stream comfortably under the limit.
+  if (env.isServerless && recipes.length > env.maxBookletRecipesServerless) {
+    throw ApiError.payloadTooLarge(
+      `This ${recipes.length}-recipe booklet PDF is too large to generate on our ` +
+        `serverless host. Download the individual recipe PDFs instead — you own every ` +
+        `recipe in this booklet.`
+    );
+  }
+
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${booklet.slug}.pdf"`);
   pipeBooklet(res, booklet, recipes);

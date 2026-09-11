@@ -22,4 +22,7 @@ export class ApiError extends Error {
   static conflict(msg = "Conflict") {
     return new ApiError(409, msg);
   }
+  static payloadTooLarge(msg = "Payload too large") {
+    return new ApiError(413, msg);
+  }
 }

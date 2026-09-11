@@ -18,6 +18,12 @@ export const env = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  // On serverless platforms (Netlify Functions / AWS Lambda) the response body
+  // is capped (~6 MB on Netlify). The full 100-recipe booklet PDF is ~11 MB, so
+  // booklet downloads above this many recipes are declined there with a helpful
+  // message; single-recipe and course PDFs stay well under the cap.
+  isServerless: !!(process.env.NETLIFY || process.env.LAMBDA_TASK_ROOT || process.env.AWS_LAMBDA_FUNCTION_NAME),
+  maxBookletRecipesServerless: Number(process.env.MAX_BOOKLET_RECIPES_SERVERLESS || 20),
   // When no Stripe key is configured we fall back to a local mock so the
   // purchase flow is fully demonstrable without external credentials.
   get paymentsMockMode() {
